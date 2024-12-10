@@ -1,9 +1,7 @@
-# modules/camera/webcam.py
-
 import cv2
 
 class Webcam:
-    def _init_(self, source=0, fps=30, resolution=(640, 480)):
+    def __init__(self, source=0, fps=30, resolution=(640, 480)):
         """
         Inisialisasi webcam.
 
