@@ -1,18 +1,28 @@
-# main.py
-
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+from collections import deque
 from services.camera.webcam import Webcam
 from services.detection.face_detection import FaceDetector
+from services.processing.rppg import RPPG
+from services.visualization.plot_signals import SignalPlotter
 
 def main():
-    # Inisialisasi kamera
-    camera = Webcam(source=0, fps=30, resolution=(640, 480))  # Menggunakan webcam default
+    # inisiaisasi komponen
+    camera = Webcam(source=0, fps=30, resolution=(640, 480))
     face_detector = FaceDetector(model_selection=1, min_detection_confidence=0.5)
+    rppg_processor = RPPG(fps=30)
+    signal_plotter = SignalPlotter()
 
-    # Variabel untuk sinyal RGB
+    # Penyimpanan sinyal yang ditingkatkan dengan moving average
+    window_size = 90  # 3 detik pada 30 fps
     r_signal, g_signal, b_signal = [], [], []
+    signal_buffer = deque(maxlen=window_size)
     f_count = 0
+    
+    # Metrik kualitas sinyal
+    min_frames = 150  # Jumlah frame minimum untuk pemrosesan
+    signal_quality_threshold = 0.1
 
     try:
         while True:
@@ -21,28 +31,43 @@ def main():
                 print("Tidak dapat membaca frame dari webcam.")
                 break
 
+            # Terapkan Gaussian blur untuk mengurangi noise
+            frame = cv2.GaussianBlur(frame, (3, 3), 0)
+
             # Deteksi wajah
             detections = face_detector.detect(frame)
 
-            for detection in detections:
-                # Dapatkan bounding box
+            if detections:
+                detection = detections[0]  # Gunakan wajah pertama yang terdeteksi
                 bbox = face_detector.get_bounding_box(detection, frame.shape)
-                new_x, new_y, new_width, new_height = face_detector.adjust_bbox(bbox, size_from_center=70)
+                new_x, new_y, new_width, new_height = face_detector.adjust_bbox(bbox)
 
-                # Pastikan koordinat bounding box berada dalam batas frame
-                new_x = max(new_x, 0)
-                new_y = max(new_y, 0)
-                new_width = min(new_width, frame.shape[1] - new_x)
-                new_height = min(new_height, frame.shape[0] - new_y)
+                # Pastikan bbox berada dalam batas frame
+                new_x = max(0, min(new_x, frame.shape[1] - new_width))
+                new_y = max(0, min(new_y, frame.shape[0] - new_height))
 
                 # Gambar bounding box
-                cv2.rectangle(frame, (new_x, new_y), (new_x + new_width, new_y + new_height), (0, 255, 0), 2)
+                cv2.rectangle(frame, (new_x, new_y), 
+                            (new_x + new_width, new_y + new_height), 
+                            (0, 255, 0), 2)
 
-                # Ekstrak ROI dan hitung rata-rata RGB
+                # Dapatkan ROI dan hitung rata-rata RGB
                 roi = frame[new_y:new_y + new_height, new_x:new_x + new_width]
-                r_signal.append(np.mean(roi[:, :, 0]))
-                g_signal.append(np.mean(roi[:, :, 1]))
-                b_signal.append(np.mean(roi[:, :, 2]))
+                
+                # Gunakan ROI forehead untuk kualitas sinyal yang lebih baik
+                forehead_roi = face_detector.get_forehead_roi(frame, (new_x, new_y, new_width, new_height))
+                
+                if forehead_roi.size > 0:
+                    # Hitung nilai rata-rata RGB
+                    rgb_means = cv2.mean(forehead_roi)[:3]
+                    signal_buffer.append(rgb_means)
+
+                    # Terapkan moving average untuk menghaluskan sinyal
+                    if len(signal_buffer) == window_size:
+                        averaged_signals = np.mean(signal_buffer, axis=0)
+                        r_signal.append(averaged_signals[2])  # BGR ke RGB
+                        g_signal.append(averaged_signals[1])
+                        b_signal.append(averaged_signals[0])
 
             # Tampilkan frame
             cv2.imshow('Webcam Feed', frame)
@@ -59,12 +84,23 @@ def main():
         camera.release()
         cv2.destroyAllWindows()
 
-    # Pastikan ada sinyal yang dikumpulkan
-    if not r_signal or not g_signal or not b_signal:
-        print("Tidak ada sinyal RGB yang dikumpulkan.")
-        return
+    # Proses sinyal hanya jika datanya cukup
+    if len(r_signal) >= min_frames:
+        # Detrend dan normalisasi sinyal
+        r_signal = np.array(r_signal)
+        g_signal = np.array(g_signal)
+        b_signal = np.array(b_signal)
 
-    # ... (lanjutan proses setelah loop)
+        # Proses rPPG
+        rppg_signal = rppg_processor.process_pos([r_signal, g_signal, b_signal])
+        filtered_signal = rppg_processor.filter_signal(rppg_signal)
+        heart_rate, peaks, normalized_signal = rppg_processor.compute_heart_rate(filtered_signal)
+
+        # Plot hasil
+        signal_plotter.plot_rgb_signals(r_signal, g_signal, b_signal)
+        signal_plotter.plot_rppg_comparison(rppg_signal, filtered_signal)
+        signal_plotter.plot_heart_rate(normalized_signal, peaks, heart_rate)
+        plt.show()
 
 if __name__ == '__main__':
     main()
