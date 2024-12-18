@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+import time
 from collections import deque
 from services.camera.webcam import Webcam
 from services.detection.face_detection import FaceDetector
@@ -8,99 +8,104 @@ from services.processing.rppg import RPPG
 from services.visualization.plot_signals import SignalPlotter
 
 def main():
-    # inisiaisasi komponen
-    camera = Webcam(source=0, fps=30, resolution=(640, 480))
-    face_detector = FaceDetector(model_selection=1, min_detection_confidence=0.5)
-    rppg_processor = RPPG(fps=30)
+    # Inisialisasi komponen
+    webcam = Webcam(fps=30)  # Set FPS ke 30
+    face_detector = FaceDetector()
+    rppg_processor = RPPG(fps=30, max_window_size=300)  # 10 detik pada 30fps
     signal_plotter = SignalPlotter()
-
-    # Penyimpanan sinyal yang ditingkatkan dengan moving average
-    window_size = 90  # 3 detik pada 30 fps
-    r_signal, g_signal, b_signal = [], [], []
-    signal_buffer = deque(maxlen=window_size)
-    f_count = 0
     
-    # Metrik kualitas sinyal
-    min_frames = 150  # Jumlah frame minimum untuk pemrosesan
-    signal_quality_threshold = 0.1
-
-    try:
-        while True:
-            ret, frame = camera.read()
-            if not ret:
-                print("Tidak dapat membaca frame dari webcam.")
-                break
-
-            # Terapkan Gaussian blur untuk mengurangi noise
-            frame = cv2.GaussianBlur(frame, (3, 3), 0)
-
-            # Deteksi wajah
-            detections = face_detector.detect(frame)
-
-            if detections:
-                detection = detections[0]  # Gunakan wajah pertama yang terdeteksi
-                bbox = face_detector.get_bounding_box(detection, frame.shape)
-                new_x, new_y, new_width, new_height = face_detector.adjust_bbox(bbox)
-
-                # Pastikan bbox berada dalam batas frame
-                new_x = max(0, min(new_x, frame.shape[1] - new_width))
-                new_y = max(0, min(new_y, frame.shape[0] - new_height))
-
-                # Gambar bounding box
-                cv2.rectangle(frame, (new_x, new_y), 
-                            (new_x + new_width, new_y + new_height), 
-                            (0, 255, 0), 2)
-
-                # Dapatkan ROI dan hitung rata-rata RGB
-                roi = frame[new_y:new_y + new_height, new_x:new_x + new_width]
+    # Performance monitoring
+    frame_times = deque(maxlen=30)  # Track 30 frame terakhir
+    process_times = deque(maxlen=5)  # Track 5 waktu pemrosesan terakhir
+    
+    # Inisialisasi variabel
+    current_hr = 0
+    current_peaks = None
+    current_signal = None
+    frame_count = 0  # Inisialisasi frame counter
+    
+    # Tambahkan variabel untuk monitoring FPS
+    start_time = time.time()
+    last_time = start_time
+    fps_report_interval = 10  # Report setiap 10 detik
+    last_frame_count = 0
+    interval_count = 1  # Track interval number
+    
+    while True:
+        frame_start = time.time()
+        
+        ret, frame = webcam.read()
+        if not ret:  # Ketika ret = False
+            break    # Keluar dari loop
+            
+        frame_count += 1  # Increment counter untuk setiap frame baru
+        
+        # Mendeteksi wajah dan get ROI
+        detections = face_detector.detect(frame)
+        if detections:
+            detection = detections[0]
+            bbox = face_detector.get_bounding_box(detection, frame.shape)
+            adjusted_bbox = face_detector.adjust_bbox(bbox)
+            roi = face_detector.get_forehead_roi(frame, adjusted_bbox)
+            
+            if roi.size > 0:
+                # Menghitung nilai rata-rata RGB dari ROI
+                mean_rgb = np.mean(roi, axis=(0, 1))
+                rppg_processor.add_to_buffer(mean_rgb)
                 
-                # Gunakan ROI forehead untuk kualitas sinyal yang lebih baik
-                forehead_roi = face_detector.get_forehead_roi(frame, (new_x, new_y, new_width, new_height))
+                # Menggambar kotak ROI
+                x, y, w, h = adjusted_bbox
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 
-                if forehead_roi.size > 0:
-                    # Hitung nilai rata-rata RGB
-                    rgb_means = cv2.mean(forehead_roi)[:3]
-                    signal_buffer.append(rgb_means)
+                # Memproses sinyal yang terakumulasi jika sudah waktunya
+                if rppg_processor.should_process():  # Check setiap 2.5 detik
+                    process_start = time.time()
+                    hr, peaks, signal, _ = rppg_processor.process_buffer()
+                    process_time = time.time() - process_start
+                    process_times.append(process_time)
+                    if hr is not None:
+                        current_hr = hr
+                        current_peaks = peaks
+                        current_signal = signal
+                        avg_process_time = np.mean(process_times)
+                        print(f"Processed {frame_count} frames, Current Heart Rate: {current_hr:.1f} BPM, Processing Time: {avg_process_time:.3f}s")
+        
+        # Menghitung FPS
+        frame_times.append(time.time() - frame_start)
+        fps = 1.0 / np.mean(frame_times)
+        
+        # Menambahkan FPS ke tampilan
+        cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        # Menampilkan plot detak jantung jika tersedia
+        if current_signal is not None:
+            frame = signal_plotter.plot_heart_rate_overlay(
+                current_signal, current_peaks, current_hr, frame
+            )
+        
+        # Monitor FPS setiap interval
+        current_time = time.time()
+        if current_time - last_time >= fps_report_interval:
+            elapsed_time = current_time - last_time
+            frames_in_interval = frame_count - last_frame_count
+            actual_fps = frames_in_interval / elapsed_time
+            start_interval = ((interval_count - 1) * 10) + 1
+            end_interval = interval_count * 10
+            print(f"Time window: {start_interval}s - {end_interval}s")
+            print(f"Actual FPS: {actual_fps:.1f} ({frames_in_interval} frames in {elapsed_time:.1f}s)")
+            last_time = current_time
+            last_frame_count = frame_count
+            interval_count += 1
+        
+        # Display frame
+        cv2.imshow('Real-time rPPG', frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    webcam.release()
+    cv2.destroyAllWindows()
 
-                    # Terapkan moving average untuk menghaluskan sinyal
-                    if len(signal_buffer) == window_size:
-                        averaged_signals = np.mean(signal_buffer, axis=0)
-                        r_signal.append(averaged_signals[2])  # BGR ke RGB
-                        g_signal.append(averaged_signals[1])
-                        b_signal.append(averaged_signals[0])
-
-            # Tampilkan frame
-            cv2.imshow('Webcam Feed', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                print("Pengguna menghentikan proses.")
-                break
-
-            f_count += 1
-
-    except Exception as e:
-        print(f"Terjadi kesalahan: {e}")
-
-    finally:
-        camera.release()
-        cv2.destroyAllWindows()
-
-    # Proses sinyal hanya jika datanya cukup
-    if len(r_signal) >= min_frames:
-        # Detrend dan normalisasi sinyal
-        r_signal = np.array(r_signal)
-        g_signal = np.array(g_signal)
-        b_signal = np.array(b_signal)
-
-        # Proses rPPG
-        rppg_signal = rppg_processor.process_pos([r_signal, g_signal, b_signal])
-        filtered_signal = rppg_processor.filter_signal(rppg_signal)
-        heart_rate, peaks, normalized_signal = rppg_processor.compute_heart_rate(filtered_signal)
-
-        # Plot hasil
-        signal_plotter.plot_rgb_signals(r_signal, g_signal, b_signal)
-        signal_plotter.plot_rppg_comparison(rppg_signal, filtered_signal)
-        signal_plotter.plot_heart_rate(normalized_signal, peaks, heart_rate)
-        plt.show()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

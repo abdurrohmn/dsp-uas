@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import numpy as np
+import cv2
 
 class SignalPlotter:
     @staticmethod
@@ -31,3 +33,24 @@ class SignalPlotter:
         plt.title(f'Detak Jantung: {heart_rate:.2f} BPM')
         plt.tight_layout()
         return plt.gcf()
+
+    @staticmethod
+    def plot_heart_rate_overlay(signal, peaks, heart_rate, frame):
+        # Membuat plot kecil
+        fig = plt.figure(figsize=(6, 2))
+        plt.plot(signal, color='black')
+        plt.plot(peaks, signal[peaks], 'x', color='red')
+        plt.title(f'Detak Jantung: {heart_rate:.2f} BPM')
+        plt.tight_layout()
+        
+        # Mengkonversi plot menjadi gambar
+        fig.canvas.draw()
+        plot_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+        plot_img = plot_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        plot_img = cv2.resize(plot_img, (320, 120))
+        plt.close()
+
+        # Menampilkan plot pada frame
+        h, w = plot_img.shape[:2]
+        frame[10:10+h, 10:10+w] = plot_img
+        return frame
