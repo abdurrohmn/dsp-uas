@@ -16,7 +16,7 @@ class RPPG:
         rppg_signal = self.cpu_POS(rgb_signals, fps=self.fps)
         return rppg_signal.reshape(-1)
 
-    def filter_signal(self, rppg_signal, lowcut=0.9, highcut=2.0, order=3):
+    def filter_signal(self, rppg_signal, lowcut=0.9, highcut=2.2, order=3):
         """Menerapkan filter bandpass ke sinyal rPPG"""
         b, a = signal.butter(order, [lowcut, highcut], btype='band', fs=self.fps)
         filtered_signal = signal.filtfilt(b, a, rppg_signal)

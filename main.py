@@ -13,7 +13,6 @@ def main():
     face_detector = FaceDetector()
     rppg_processor = RPPG(fps=30, max_window_size=300)  # 10 detik pada 30fps
     signal_plotter = SignalPlotter()
-    
     # Performance monitoring
     frame_times = deque(maxlen=30)  # Track 30 frame terakhir
     process_times = deque(maxlen=5)  # Track 5 waktu pemrosesan terakhir
@@ -69,6 +68,12 @@ def main():
                         current_signal = signal
                         avg_process_time = np.mean(process_times)
                         print(f"Processed {frame_count} frames, Current Heart Rate: {current_hr:.1f} BPM, Processing Time: {avg_process_time:.3f}s")
+                        
+                        # Menampilkan plot detak jantung jika tersedia
+                        if current_signal is not None:
+                            frame = signal_plotter.plot_heart_rate_overlay(
+                                current_signal, current_peaks, current_hr, frame
+                            )
         
         # Menghitung FPS
         frame_times.append(time.time() - frame_start)
@@ -77,12 +82,6 @@ def main():
         # Menambahkan FPS ke tampilan
         cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30), 
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
-        # Menampilkan plot detak jantung jika tersedia
-        if current_signal is not None:
-            frame = signal_plotter.plot_heart_rate_overlay(
-                current_signal, current_peaks, current_hr, frame
-            )
         
         # Monitor FPS setiap interval
         current_time = time.time()
@@ -98,6 +97,12 @@ def main():
             last_frame_count = frame_count
             interval_count += 1
         
+        if current_hr > 0:
+            cv2.putText(frame, f"HR: {current_hr:.1f} BPM",
+                        (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0,255,0), 2)
+
         # Display frame
         cv2.imshow('Real-time rPPG', frame)
         
