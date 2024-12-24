@@ -4,7 +4,14 @@ import time
 from collections import deque
 
 class RPPG:
-    def __init__(self, fps=30, max_window_size=300):  # 300 frame = 10 detik pada 30fps
+    def __init__(self, fps=30, max_window_size=300):
+        """
+        Inisialisasi objek RPPG dengan parameter FPS dan ukuran jendela maksimum.
+        
+        Parameter:
+        - fps (int): Frame per second kamera.
+        - max_window_size (int): Ukuran maksimum jendela untuk buffer sinyal.
+        """
         self.fps = fps
         self.max_window_size = max_window_size
         self.initialize_buffers()
@@ -17,13 +24,35 @@ class RPPG:
         return rppg_signal.reshape(-1)
 
     def filter_signal(self, rppg_signal, lowcut=0.9, highcut=2.2, order=3):
-        """Menerapkan filter bandpass ke sinyal rPPG"""
+        """
+        Menerapkan filter bandpass ke sinyal rPPG.
+        
+        Parameter:
+        - rppg_signal (numpy.ndarray): Sinyal rPPG yang akan difilter.
+        - lowcut (float): Frekuensi batas bawah untuk filter.
+        - highcut (float): Frekuensi batas atas untuk filter.
+        - order (int): Orde filter Butterworth.
+        
+        Return:
+        - filtered_signal (numpy.ndarray): Sinyal setelah difilter.
+        """
         b, a = signal.butter(order, [lowcut, highcut], btype='band', fs=self.fps)
         filtered_signal = signal.filtfilt(b, a, rppg_signal)
         return filtered_signal
 
     def compute_heart_rate(self, filtered_signal, prominence=0.5):
-        """Menghitung detak jantung dari sinyal rPPG yang telah difilter"""
+        """
+        Menghitung detak jantung dari sinyal rPPG yang telah difilter.
+        
+        Parameter:
+        - filtered_signal (numpy.ndarray): Sinyal rPPG yang telah difilter.
+        - prominence (float): Ambang batas prominensi untuk deteksi puncak.
+        
+        Return:
+        - heart_rate (float): Detak jantung dalam BPM.
+        - peaks (numpy.ndarray): Indeks titik puncak dalam sinyal.
+        - normalized_signal (numpy.ndarray): Sinyal yang telah dinormalisasi.
+        """
         # Pre-alokasi array untuk normalisasi
         normalized_signal = np.empty_like(filtered_signal)
         np.subtract(filtered_signal, np.mean(filtered_signal), out=normalized_signal)
@@ -83,6 +112,9 @@ class RPPG:
         return H
 
     def initialize_buffers(self):
+        """
+        Menginisialisasi buffer dan variabel pendukung untuk pemrosesan sinyal.
+        """
         # Menggunakan deque dengan ukuran maksimum untuk efisiensi memori
         self.signal_buffer = deque(maxlen=self.max_window_size)
         self.last_processed_time = time.time()
@@ -90,17 +122,36 @@ class RPPG:
         self.last_hr_values = deque(maxlen=5)  # Menyimpan 5 nilai detak jantung terakhir
         
     def add_to_buffer(self, rgb_values):
+        """
+        Menambahkan nilai RGB ke dalam buffer sinyal.
+        
+        Parameter:
+        - rgb_values (tuple atau list): Nilai RGB yang akan ditambahkan.
+        """
         self.signal_buffer.append(rgb_values)
         
     def should_process(self):
-        """Memeriksa apakah sudah waktunya untuk memproses data baru"""
+        """
+        Memeriksa apakah sudah waktunya untuk memproses data baru.
+        
+        Return:
+        - (bool): True jika perlu memproses, False jika tidak.
+        """
         current_time = time.time()
         if current_time - self.last_processed_time >= self.processing_window:  # Check setiap 10 detik
             return True
         return False
         
     def process_buffer(self):
-        """Memproses buffer yang terakumulasi dari indeks terakhir yang diproses"""
+        """
+        Memproses buffer yang terakumulasi dari indeks terakhir yang diproses.
+        
+        Return:
+        - smoothed_hr (float): Detak jantung yang telah dihaluskan.
+        - peaks (numpy.ndarray): Indeks titik puncak dalam sinyal.
+        - normalized_signal (numpy.ndarray): Sinyal yang telah dinormalisasi.
+        - filtered_signal (numpy.ndarray): Sinyal setelah difilter.
+        """
         if len(self.signal_buffer) < self.fps * self.processing_window:
             return None, None, None, None
             

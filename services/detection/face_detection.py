@@ -44,7 +44,10 @@ class FaceDetector:
         - frame_shape (tuple): Dimensi dari frame (tinggi, lebar, channels).
 
         Return:
-        - x, y, width, height (int): Koordinat bounding box dalam piksel.
+        - x (int): Koordinat x dari bounding box.
+        - y (int): Koordinat y dari bounding box.
+        - width (int): Lebar bounding box.
+        - height (int): Tinggi bounding box.
         """
         bbox = detection.location_data.relative_bounding_box
         h, w = frame_shape[:2]
@@ -62,14 +65,17 @@ class FaceDetector:
 
     def adjust_bbox(self, bbox, size_from_center=70):
         """
-        Penyesuaian bbox yang ditingkatkan dengan smoothing.
+        Penyesuaian bounding box yang ditingkatkan dengan smoothing.
 
         Parameter:
         - bbox (tuple): Koordinat bounding box (x, y, width, height).
         - size_from_center (int): Ukuran dari pusat bounding box.
 
         Return:
-        - new_x, new_y, new_width, new_height (int): Koordinat bounding box yang disesuaikan.
+        - new_x (int): Koordinat x yang telah disesuaikan.
+        - new_y (int): Koordinat y yang telah disesuaikan.
+        - new_width (int): Lebar bounding box yang telah disesuaikan.
+        - new_height (int): Tinggi bounding box yang telah disesuaikan.
         """
         x, y, width, height = bbox
         bbox_center_x = x + width // 2
