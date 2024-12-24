@@ -5,10 +5,11 @@ Real-time vital signs monitoring system yang menggunakan computer vision untuk m
 ## 🛠️ Tech Stack
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![OpenCV](https://img.shields.io/badge/OpenCV-4.10.0-green.svg)
-![NumPy](https://img.shields.io/badge/NumPy-2.1.3-blue.svg)
-![SciPy](https://img.shields.io/badge/SciPy-1.14.1-blue.svg)
-![Matplotlib](https://img.shields.io/badge/Matplotlib-3.9.3-blue.svg)
+![NumPy](https://img.shields.io/badge/numpy-1.21.0+-blue.svg)
+![SciPy](https://img.shields.io/badge/scipy-1.7.0+-blue.svg)
+![Matplotlib](https://img.shields.io/badge/matplotlib-3.4.0+-blue.svg)
+![OpenCV](https://img.shields.io/badge/opencv--python-4.5.0+-green.svg)
+![MediaPipe](https://img.shields.io/badge/mediapipe-0.8.9+-green.svg)
 
 ## 👥 Anggota Kelompok
 
@@ -47,9 +48,6 @@ Proyek ini merupakan implementasi sistem monitoring menggunakan teknik pengolaha
 -   Face Detection: MediaPipe Face Detection Model
 -   Pose Detection: MediaPipe Pose Landmarker
 
--   Face Detection: MediaPipe Face Detection Model
--   Pose Detection: MediaPipe Pose Landmarker
-
 ## ✨ Fitur
 
 -   **Monitoring Real-time**
@@ -70,7 +68,7 @@ Proyek ini merupakan implementasi sistem monitoring menggunakan teknik pengolaha
 1. Clone repository ini:
 
 ```bash
-git clone [URL repository Anda]
+git clone https://github.com/daffafahreza4/dsp-uas.git
 ```
 
 3. Install dependencies:
